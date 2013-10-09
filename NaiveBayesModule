@@ -1,0 +1,245 @@
+import math
+import collections
+
+"""
+NAIVE BAYES MODULE
+
+"""
+
+class Exemplar:
+    def __init__(self, featureSet=(), classLabel=""):
+        self.featureSet = featureSet
+        self.classLabel = classLabel
+    def getFeatures(self):
+        return self.featureSet
+    def getClass(self):
+        return self.classLabel
+    
+class Data:
+    def __init__(self):
+        self.exemplars={} # dictionary of exemplars keyed on a
+                          # unique exemplarID 
+        self.featureLabels=()
+        self.classLabels = []
+        self.classLabelCount = {} #Number of exemplars marked with certain classes, keyed on the certain class. Helps for calculating P(classlabel) in Naive Bayes Classifier.
+        self.freqFeatClass = collections.defaultdict(int) # dictionary of Count(feature AND class) keyed on "Count(feat|classlabel)"
+    def load(self, dataPath=""):
+        """
+        Loads data from a file into a Data instance. The file
+        must be tab-delimited. The first line contains column headers
+        for the exemplarID, the feature labels, and the last column of
+        the first line is the header for the class label. The header
+        for the exemplarID and for the class label are ignored. The
+        lines following the header line contain an exemplar ID,
+        feature values and the class label; one exemplar per line.
+
+        Each exemplar ID is keyed with an instance of the exemplar class.
+        Counts of the class labels themselves are taken.
+        After the classLabels list has been filled, the function goes through
+        each exemplar's feature set, and fills up a dictionary of counts of
+        (feature AND class). For instance, if an exemplar has a feature "sale"
+        and a class "spam," then the count for (sale AND spam) will increase
+        by 1. Each count is keyed on a string that describes the count,
+        "Count(feature|class)."
+
+        This dictionary of counts is helpful for creating the probability
+        dictionary in PingNaiveBayesClassifier, where conditional probabilities
+        of features given classes are keyed on "P(feat|class)."
+        
+        """
+        f = open(dataPath)
+        classes=[]
+        fSplit = f.read().split("\n") 
+        for line in fSplit:
+            lineWords = line.split()
+            if len(lineWords) != 0:
+                firstWd = lineWords[0]
+            if firstWd == "exID":
+                lineNoID = lineWords[1:]
+                feats = lineNoID[:-1]
+                self.featureLabels = tuple(feats)
+            else:
+                lineWordsAgain = line.split()
+                if len(lineWordsAgain) != 0:
+                    lineNoID = lineWordsAgain[1:]
+                exID = firstWd
+                features = lineNoID[:-1]
+                exem = Exemplar()
+                cLabel = "".join(cLab for cLab in lineNoID[-1:])
+                exem.classLabel = cLabel
+                exem.featureSet = tuple(features)
+                self.exemplars[exID] = exem
+                classes.append(exem.classLabel)
+        self.classLabels = list(set(classes))
+        for cLabel in self.classLabels:
+            cLabelCount = 0
+            for exem in self.exemplars.values():
+                if exem.classLabel == cLabel:
+                    cLabelCount += 1
+            self.classLabelCount[cLabel] = cLabelCount
+            for feature in self.featureLabels:
+                key = "Count(%s|%s)" % (feature, cLabel)
+                featGivenClass = 0
+                for exemplar in self.exemplars.values():
+                    i = self.featureLabels.index(feature)
+                    if exemplar.featureSet[i] == "Y" and exemplar.classLabel == cLabel: #Counts feature and class freqs for binary files
+                        featGivenClass += 1
+                    else:
+                        pass
+                self.freqFeatClass[key] = featGivenClass
+        f.close()
+    def loadNonBinary(self, dataPath=""):
+        """
+        This loads data for the toy example, in which exemplars have feature set values that aren't binary
+
+        """
+        f = open(dataPath)
+        featuresForToy = [] #this will only be used if the file is like the toy example
+        classes=[]
+        fSplit = f.read().split("\n") 
+        for line in fSplit:
+            lineWords = line.split()
+            if len(lineWords) != 0:
+                firstWd = lineWords[0]
+                exID = firstWd
+                lineWds = line.split()
+                lineClass = lineWds.pop()
+                lineNoID = lineWds[1:]
+                exem = Exemplar()
+                exem.classLabel = lineClass
+                exem.featureSet = tuple(lineNoID)
+                self.exemplars[exID] = exem
+                classes.append(exem.classLabel)
+                for feature in exem.featureSet:
+                    featuresForToy.append(feature)
+        if featuresForToy: #sets up Data class' feature set if using non-binary file
+            self.featureLabels = tuple(set(featuresForToy))
+        self.classLabels = list(set(classes))
+        for cLabel in self.classLabels:
+            cLabelCount = 0
+            for exem in self.exemplars.values():
+                if exem.classLabel == cLabel:
+                    cLabelCount += 1
+            self.classLabelCount[cLabel] = cLabelCount
+            for feature in self.featureLabels:
+                key = "Count(%s|%s)" % (feature, cLabel)
+                featGivenClass = 0
+                for exemplar in self.exemplars.values():
+                    i = self.featureLabels.index(feature)
+                    if feature in exemplar.featureSet and exemplar.classLabel == cLabel: #Counts feature and class freqs for non-binary files
+                        featGivenClass += 1
+                    else:
+                        pass
+                self.freqFeatClass[key] = featGivenClass
+        f.close()
+    def yank(self,n):
+        """ Returns a dictionary of n randomly chosen examplars"""
+        for i in range(n):
+            return self.exemplars.popitem()
+
+class PingNaiveBayesClassifier:
+    def __init__ (self, freqClassLabels={}, freqFeatureLabels={}, features=()):
+        self.freqClassLabels = freqClassLabels
+        self.freqFeatureLabels = freqFeatureLabels
+        self.features = features #i need this for the predict method
+    def train(self, trainData):
+        """
+        Takes an instance of the Data class and fills up the class frequency
+        distribution dictionary and the conditional feature frequency
+        distribution dictionary
+
+        """
+        for uniqueClass in list(set(trainData.classLabels)):
+            self.freqClassLabels[uniqueClass] = trainData.classLabelCount[uniqueClass]/float(len(trainData.exemplars))
+            for feature in trainData.featureLabels:
+                key = "Count(%s|%s)" % (feature, uniqueClass)
+                NBCkey = "P(%s|%s)" % (feature, uniqueClass) #key used for NBC dict of P(feat|class)
+                cFeatAndClass = trainData.freqFeatClass[key] #takes the value keyed on Count(feature&class) which is a frequency
+                cClass = trainData.classLabelCount[uniqueClass]
+                self.freqFeatureLabels[NBCkey] = cFeatAndClass/float(cClass)
+        self.features = trainData.featureLabels
+                        
+                        
+    def predict(self, testExemplar, ignore=False):
+        """
+        Takes an instance of the Exemplar class and predicts its
+        class label and returns a tuple of the predicted class
+        label, and the actual label.
+
+        I ignored all features with probabilities of zero.
+
+
+        """
+        potentialClassProb = {} #key = class, value = result of formula.
+        potentialClassSortedList = [] #helps to extract the class with the greatest probability
+        if len(set(testExemplar.featureSet)) != 2: #checks if exemplar does not have binary values for features, used for Toy Example - like files
+            for classLabel in self.freqClassLabels.keys():
+                probClass = self.freqClassLabels[classLabel]
+                featureGivenClassP = 1
+                for feature in testExemplar.featureSet:
+                    if feature in testExemplar.featureSet:
+                        key = "P(%s|%s)" % (feature, classLabel)
+                        featureGivenClassP = featureGivenClassP * self.freqFeatureLabels[key]
+                featureGivenClassP = featureGivenClassP * probClass
+                potentialClassProb[featureGivenClassP] = classLabel
+            for value in potentialClassProb.iteritems():
+                potentialClassSortedList.append(value)
+            potentialClassSortedList.sort()
+            return potentialClassSortedList.pop()
+        else: #used for files with binary valued features (Y/N, 1/0, etc)
+            for classLabel in self.freqClassLabels.keys():
+                probClass = self.freqClassLabels[classLabel]
+                featureGivenClassP = 1
+                for feature in self.features:
+                    i = self.features.index(feature)
+                    NBCkey = "P(%s|%s)" % (feature, classLabel)
+                    if testExemplar.featureSet[i] == "Y":
+                        if self.freqFeatureLabels[NBCkey] != 0:
+                            featureGivenClassP = featureGivenClassP * self.freqFeatureLabels[NBCkey]
+                        else:
+                            print "Ignored zero probability" #If P(feature|class) = 0, probability is ignored
+                    else:
+                        pass
+                featureGivenClassP = featureGivenClassP * probClass 
+                potentialClassProb[featureGivenClassP] = classLabel
+            for classProb in potentialClassProb.keys():
+                potentialClassSortedList.append(classProb)
+            potentialClassSortedList = sorted(potentialClassSortedList)
+            higherProb = potentialClassSortedList.pop()
+            return potentialClassProb[higherProb]
+    def predictFromFile(self, testData):
+        """
+        This is an option to have the classifier predict
+        an entire file of exemplars, rather than feeding in an exemplar
+        instance by instance.
+
+        """
+        for exemplar in testData.exemplars.keys():
+            self.predict(exemplar)
+    def exemplarAccuracy(self, testExemplar, classTuple=()):
+        """
+        Returns True if the class labels in the tuple are idenctial,
+        otherwise returns False
+
+        """
+        predictedClass = self.predict(testExemplar)
+        classTuple=(testExemplar.getClass())
+        return sorted(predictedClass) == sorted(classTuple)
+    def modelAccuracy(self, testData):
+        """
+        Returns the percent correct on testData which is
+        an instance of the Data class
+
+        """
+        correct = 0
+        total = len(testData.exemplars)
+        for exemplar in testData.exemplars:
+            exemInst = testData.exemplars[exemplar]
+            classPrediction = self.exemplarAccuracy(exemInst)
+            print classPrediction
+            if classPrediction == True:
+                correct += 1
+        accuracy = (correct/float(total)) * 100
+        print accuracy
+
+        
