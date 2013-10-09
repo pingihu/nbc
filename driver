@@ -1,0 +1,148 @@
+"""
+DRIVER
+
+"""
+from NaiveBayesModule import *
+from nltk import *
+import os
+import re
+def mainToy():
+    text = Data()
+    text.loadNonBinary("/Users/pinghu/Downloads/pingpoppy.txt")
+    c = PingNaiveBayesClassifier()
+    c.train(text)
+    test = Exemplar()
+    test.featureSet = ("cool", "high", "true")
+    test.classLabel = "no"
+    result = c.predict(test)
+    print result
+
+def makeFeatureSet(n=2000, dataPath=""):
+    """
+
+    This function finds the top 2000 words in the movie
+    reviews, and creates a feature set out of them, by
+    searching for alphabetic characters only (words), line by line,
+    keying the frequencies to the words, storing the frequencies
+    in a list, sorting that list, and using the top 2000 frequencies
+    in that list to find the top 2000 words via dictionary lookup.
+
+    You can also use it to find the top n words, just pass in a number as
+    another argument.
+    
+    """
+    allWordList = []
+    topNWords = []
+    wordDictCount = {}
+    for subDir in ("pos", "neg"):
+        dataPath = "%s/%s" % (dataPath, subDir)
+        for root, directories, files in os.walk(dataPath):
+            for f in files:
+                if f.endswith(".txt"):
+                    fPath = "%s/%s" % (dataPath, f)
+                    fHandle = open(fPath)
+                    for rawLine in fHandle.read().split("\n"):
+                        line = re.sub(r'[^a-z|^A-z|\s|\_]', "", rawLine)
+                        line = line.split()
+                        for word in line:
+                            allWordList.append(word)
+                    fHandle.close()
+                else:
+                    pass
+    fDist = FreqDist(allWordList)
+    popularWords = fDist.keys()
+    topNWords = popularWords[:n]
+    return topNWords
+
+def makeTrainDataFiles(dirPath=""):
+    """
+    This function creates two tab delimited files: movieTrainData.txt,
+    which contains 950 training exemplars, and movieTestData.txt, which
+    contains 50 test exemplars, generated pseudo-randomly by assigning
+    a number to each movie review and allocating those with numbers
+    divisible by 20 to the test data file.
+
+    Each line in the file is an exemplar with an exemplar ID as the first
+    header, and the class label as the last, much like the toy example.
+    
+    """
+    featureSet = makeFeatureSet("/Users/pinghu/nltk_data/corpora/movie_reviews")
+    newTrainFile = open("/Users/pinghu/Documents/movieTrainData.txt", 'w')
+    newTestFile = open("/Users/pinghu/Documents/movieTestData.txt", 'w')
+    line = "exID"+ "\t".join(str(featLabel) for featLabel in featureSet) + "\tclass\n"
+    newTrainFile.write(line)
+    def writeALine(fileName): # writes a tab-delimited exemplar per line to train file and test file, respectively
+        bigListOfWords = []
+        exValues = []
+        fPath = "%s/%s" % (dataPath, f)
+        fHandle = open(fPath)
+        exLine = str(f).strip(".txt") + "\t"
+        for rawLine in fHandle.read().split("\n"):
+            line = re.sub(r'[^a-z|^A-z|\s|\_]', "", rawLine)
+            line = line.split()
+            line = list(set(line))
+            bigListOfWords.extend(line)
+        for word in featureSet:
+            if word in bigListOfWords:
+                exValues.append("Y")
+            else:
+                exValues.append("N")
+        if subDir == "pos":
+            exValues.append("pos")
+        elif subDir == "neg":
+            exValues.append("neg")
+        exLine = exLine + "\t".join(value for value in exValues) + "\n"
+        fHandle.close()
+        return exLine
+    for subDir in ("pos", "neg"):
+        dataPath = "%s/%s" % (dirPath, subDir)
+        for root, directories, files in os.walk(dataPath):
+            randomController = 0
+            for f in files:
+                if f.endswith(".txt"):
+                    randomController += 1
+                    if randomController % 20 == 0: #pseudorandomly selects 50 files to set aside as test exemplars
+                        testExemplar = writeALine(f)
+                        newTestFile.write(testExemplar)
+                    else:
+                        trainExemplar = writeALine(f)
+                        newTrainFile.write(trainExemplar)
+    newTrainFile.close()
+    newTestFile.close()
+    
+"""
+
+Uncomment below if you wish to make the train and test data files.
+(Note: pathways may not be the same.)
+
+"""
+
+#makeTrainDataFiles("/Users/pinghu/nltk_data/corpora/movie_reviews")
+
+
+def main():
+    """
+    This feeds the movie review train and test files into the
+    Data class, then calls an instance of the Naive Bayes Classifier
+    to be trained on the train file and make predictions on the test
+    file.
+
+    """
+    reviews = Data()
+    reviews.load("/Users/pinghu/Documents/movieTrainData.txt")
+    NBC = PingNaiveBayesClassifier() #I changed the name because nltk also has a class called NaiveBayesClassifier 
+    #and I imported nltk as well as NaiveBayesModule
+    NBC.train(reviews)
+    testReviews = Data()
+    testReviews.load("/Users/pinghu/Documents/movieTestData.txt")
+    NBC.modelAccuracy(testReviews)
+
+#uncomment below to run
+#main()
+
+#uncomment below to run on toy example
+#mainToy()
+    
+
+    
+
